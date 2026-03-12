@@ -319,7 +319,6 @@ class Program
                 charRanks[c] = rank;
             }
 
-            Console.WriteLine($"Position before blockCount: {br.BaseStream.Position}");
             // Работа с блоками данных:
             // Чтение количества блоков.
             int blockCount = br.ReadInt32();
