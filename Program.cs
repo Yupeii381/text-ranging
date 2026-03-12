@@ -7,7 +7,7 @@ class Program
 {
     static void Main(string[] args)
     {
-        string path = "D:\\Projects\\text-ranging\\content\\cantrbry\\alice29.txt";
+        string path = Path.Combine("content", "cantrbry", "alice29.txt");
 
         byte[] data = File.ReadAllBytes(path);
         int dataLength = data.Length;
