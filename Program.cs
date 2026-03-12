@@ -203,6 +203,25 @@ class Program
     /// <param name="blockSizes">Массив размеров для каждого закодированного блока. Длина массива должна соответствовать количеству элементов в <paramref name="encodedBlocks"/>.</param>
     /// <param name="charRanks">Словарь, сопоставляющий символы их рангам, используемый для декодирования. Ключ — символ, значение — ранг.</param>
     /// <param name="originalTextLength">Длина исходного текста, который был закодирован. Используется для восстановления исходных данных при декодировании.</param>
+    /// 
+    /// FILE FORMAT:
+    /// header                  4 bytes  (0x535352)
+    /// text length             4 bytes  (int)
+    /// char count              4 bytes  (int)
+    /// 
+    /// char table:
+    ///     char (int32)        4 bytes
+    ///     rank (int32)        4 bytes
+    ///     ...
+    /// 
+    /// block count              4 bytes  (int)
+    /// block sizes:
+    ///     block size (int32)   4 bytes
+    ///     ...
+    /// 
+    /// encoded blocks:
+    ///     byte length (int32)  4 bytes
+    ///     bytes                variable (byte[])
     static void EncodeToFile(
         string outputFilePath,
         BigInteger[] encodedBlocks,
@@ -223,7 +242,7 @@ class Program
             // Пишем символы и их ранги
             foreach (var kvp in charRanks)
             {
-                bw.Write(kvp.Key);
+                bw.Write((int)kvp.Key);
                 bw.Write(kvp.Value);
             }
 
@@ -241,6 +260,7 @@ class Program
             }
             Console.WriteLine($"Данные сохранены в {outputFilePath}");
         }
+
     }
 
     /// <summary>
@@ -255,6 +275,27 @@ class Program
     /// Кортеж (<see cref="BigInteger[]"/>, <see cref="int[]"/>, <see cref="Dictionary{Char,Int32}"/>, <see cref="int"/>),
     /// содержащий данные в том порядке, в котором они были сохранены методом <see cref="EncodeToFile"/>.
     /// </returns>
+    /// 
+    ///FILE FORMAT (.ssr)
+    ///
+    /// int32 header
+    /// int32 originalTextLength
+    /// int32 charCount
+    ///
+    /// charCount:
+    ///     int32 char
+    ///     int32 rank
+    ///     ...
+    ///     
+    /// int32 blockCount
+    ///
+    /// blockCount:
+    ///     int32 blockSize
+    ///     ...
+    /// 
+    /// blockCount:
+    ///     int32 byteLength
+    ///     byte[byteLength] encodedBlock
     static (BigInteger[], int[], Dictionary<char, int>, int) ReadFromFile(string inputFilePath)
     {
         using (var fs = new FileStream(inputFilePath, FileMode.Open, FileAccess.Read))
@@ -273,11 +314,12 @@ class Program
             Dictionary<char, int> charRanks = new Dictionary<char, int>();
             for (int i = 0; i < charCount; i++)
             {
-                char c = br.ReadChar();
+                char c = (char)br.ReadInt32();
                 int rank = br.ReadInt32();
                 charRanks[c] = rank;
             }
 
+            Console.WriteLine($"Position before blockCount: {br.BaseStream.Position}");
             // Работа с блоками данных:
             // Чтение количества блоков.
             int blockCount = br.ReadInt32();

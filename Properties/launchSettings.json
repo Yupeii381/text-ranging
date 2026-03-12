@@ -2,7 +2,7 @@
   "profiles": {
     "text-ranging": {
       "commandName": "Project",
-      "commandLineArgs": "D:\\Projects\\text-ranging\\content\\cantrbry\\alice29.txt"
+      "commandLineArgs": "decode D:\\Projects\\text-ranging\\content\\cantrbry\\alice29.ssr"
     }
   }
 }
