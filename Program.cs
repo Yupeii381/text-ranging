@@ -117,8 +117,8 @@ class Program
     static void PrintHelp()
     {
         Console.WriteLine("Использование:");
-        Console.WriteLine("  ssr encode <file>  - закодировать файл");
-        Console.WriteLine("  ssr decode <file>  - раскодировать файл .ssr");
+        Console.WriteLine("  encode <file>  - закодировать файл");
+        Console.WriteLine("  decode <file>  - раскодировать файл .ssr");
     }
 
     /// <summary>
