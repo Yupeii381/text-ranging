@@ -1,8 +1,12 @@
 {
-  "profiles": {
-    "text-ranging": {
-      "commandName": "Project",
-      "commandLineArgs": "decode D:\\Projects\\text-ranging\\content\\cantrbry\\alice29.ssr"
+    "profiles": {
+        "text-ranging-encode": {
+            "commandName": "Project",
+            "commandLineArgs": "encode D:\\Projects\\text-ranging\\content\\cantrbry\\alice29.txt"
+        },
+        "text-ranging-decode": {
+            "commandName": "Project",
+            "commandLineArgs": "decode D:\\Projects\\text-ranging\\content\\cantrbry\\alice29.ssr"
+        }
     }
-  }
 }
