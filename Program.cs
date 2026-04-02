@@ -67,7 +67,8 @@ class Program
                 .Select((c, i) => new { Char = c, Rank = i + 1 })
                 .ToDictionary(x => x.Char, x => x.Rank);
 
-            int blockSize = 10000;
+            int blockSize = 2000;
+
             int numBlocks = (int)Math.Ceiling((double)data.Length / blockSize);  // Вычисляем количество блоков, округляя вверх, чтобы учесть остаток символов в последнем блоке 
 
             var blocks = new char[numBlocks][];
@@ -111,6 +112,51 @@ class Program
 
     }
 
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="data"></param>
+    /// <param name="charToRank"></param>
+    /// <returns></returns>
+        static List<char[]> BuildBlocks(
+            char[] data,
+            Dictionary<char, int> charToRank)
+        {
+            const double MAX_LOG10 = 5000000;
+
+            var blocks = new List<char[]>();
+            var current = new List<char>();
+
+            BigInteger currentValue = 0;
+            int BaseVal = charToRank.Count;
+
+            foreach (var c in data)
+            {
+                int rank = charToRank[c] - 1;
+                BigInteger nextValue = currentValue * BaseVal + rank;
+
+                if (current.Count > 0 &&
+                    nextValue > 0 &&
+                    BigInteger.Log10(nextValue) > MAX_LOG10)
+                {
+                    blocks.Add(current.ToArray());
+                    current.Clear();
+                    currentValue = 0;
+                }
+
+                current.Add(c);
+                currentValue = nextValue;
+            }
+
+            if (current.Count > 0)
+            {
+                blocks.Add(current.ToArray());
+            }
+
+            return blocks;
+        }
+
     /// <summary>
     /// Функция для печати справки по использованию программы. Вызывается, если аргументы командной строки не соответствуют ожидаемому формату.
     /// </summary>
@@ -135,12 +181,13 @@ class Program
     /// Возвращает <see cref="BigInteger"/>, представляющее закодированный блок текста.</returns>
     static BigInteger EncodeBlock(char[] block, Dictionary<char, int> charToRank)
     {
-
         BigInteger result = 0;
-        for (int i = block.Length - 1; i >= 0; i--)
+        int BaseVal = charToRank.Count;
+
+        foreach (var c in block)
         {
-            int rank = charToRank[block[i]];
-            result = (rank - 1) + result * charToRank.Count;
+            int rank = charToRank[c] - 1;
+            result = result * BaseVal + rank;
         }
         return result;
     }
@@ -156,12 +203,11 @@ class Program
     static char[] DecodeBlock(BigInteger encoded, Dictionary<int, char> rankToChar, int blockSize)
     {
         char[] blockText = new char[blockSize];
-        for (int i = 0; i < blockSize; i++)
+        for (int i = blockSize - 1; i >= 0; i--)
         {
             int rank = (int)(encoded % rankToChar.Count);
-            char c = rankToChar[rank + 1];
-            blockText[i] = c;
-            encoded = encoded / rankToChar.Count;
+            blockText[i] = rankToChar[rank + 1];
+            encoded /= rankToChar.Count;
         }
         return blockText;
     }
@@ -211,7 +257,6 @@ class Program
     /// 
     /// char table:
     ///     char (int32)        4 bytes
-    ///     rank (int32)        4 bytes
     ///     ...
     /// 
     /// block count              4 bytes  (int)
@@ -239,11 +284,11 @@ class Program
             // Пишем количество уникальных символов
             bw.Write(charRanks.Count);
 
-            // Пишем символы и их ранги
+            // Пишем символы
             foreach (var kvp in charRanks)
             {
                 bw.Write((int)kvp.Key);
-                bw.Write(kvp.Value);
+                //bw.Write(kvp.Value);
             }
 
             // Информация о блоках
@@ -254,7 +299,7 @@ class Program
             }
             foreach (var encoded in encodedBlocks)
             {
-                var bytes = encoded.ToByteArray();
+                var bytes = encoded.ToByteArray(isUnsigned: true, isBigEndian: true);
                 bw.Write(bytes.Length);
                 bw.Write(bytes);
             }
@@ -284,7 +329,6 @@ class Program
     ///
     /// charCount:
     ///     int32 char
-    ///     int32 rank
     ///     ...
     ///     
     /// int32 blockCount
@@ -310,13 +354,20 @@ class Program
             int originalTextLength = br.ReadInt32();
             int charCount = br.ReadInt32();
 
-            // Чтение таблицы символ->ранг из файла и сохранение ее в словарь charRanks для дальнейшего использования при декодировании.
+            //// Чтение таблицы символ->ранг из файла и сохранение ее в словарь charRanks для дальнейшего использования при декодировании.
+            //Dictionary<char, int> charRanks = new Dictionary<char, int>();
+            //for (int i = 0; i < charCount; i++)
+            //{
+            //    char c = (char)br.ReadInt32();
+            //    int rank = br.ReadInt32();
+            //    charRanks[c] = rank;
+            //}
+
             Dictionary<char, int> charRanks = new Dictionary<char, int>();
             for (int i = 0; i < charCount; i++)
             {
                 char c = (char)br.ReadInt32();
-                int rank = br.ReadInt32();
-                charRanks[c] = rank;
+                charRanks[c] = i;
             }
 
             // Работа с блоками данных:
@@ -336,7 +387,7 @@ class Program
             {
                 int byteLength = br.ReadInt32();
                 byte[] bytes = br.ReadBytes(byteLength);
-                encodedBlocks[i] = new BigInteger(bytes);
+                encodedBlocks[i] = new BigInteger(bytes, isUnsigned: true, isBigEndian:true);
             }
             // Возвращаем прочитанные данные в виде кортежа, который будет использоваться для декодирования текста.
             return (encodedBlocks, blockSizes, charRanks, originalTextLength);
