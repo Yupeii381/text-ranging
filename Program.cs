@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.IO;
 using System.Numerics;
 using System.Reflection.Metadata.Ecma335;
@@ -72,39 +73,37 @@ class Program
             int numBlocks = (int)Math.Ceiling((double)data.Length / blockSize);  // Вычисляем количество блоков, округляя вверх, чтобы учесть остаток символов в последнем блоке 
 
             var blocks = new char[numBlocks][];
-            var blockSizes = new int[numBlocks];
 
             for (int i = 0; i < numBlocks; i++)
             {
                 int blockStart = i * blockSize;
                 int blockLength = Math.Min(blockSize, data.Length - blockStart); // Вычисляем фактическую длину блока, которая может быть меньше blockSize для последнего блока
                 blocks[i] = data.Skip(blockStart).Take(blockLength).ToArray();   // Из массива data пропускаем blockStart символов и берем blockLength символов для текущего блока
-                blockSizes[i] = blockLength;                                     // Сохраняем фактическую длину блока в массив blockSizes
             }
 
             // Кодируем каждый блок текста в большое целое число, используя функцию EncodeBlock и словарь charToRank для определения рангов символов.
             // Результаты кодирования сохраняются в массив encodedBlocks.
-            var encodedBlocks = blocks
-                .Select(b => EncodeBlock(b, charToRank))
-                .ToArray();
+            var encodedBlocks = EncodeAllBlocks(blocks, charToRank);
+
+            var maxCharByteSize = MaxCharByteSize(charToRank);
 
             // Формируем путь к выходному файлу, изменяя расширение ".ssr" исходного файла, и сохраняем закодированные блоки, размеры блоков,
             // словарь символ->ранг и длину исходного текста в бинарный файл с помощью функции EncodeToFile.
             string outputFilePath = Path.ChangeExtension(filePath, ".ssr");
-            EncodeToFile(outputFilePath, encodedBlocks, blockSizes, charToRank, data.Length);
+            EncodeToFile(outputFilePath, encodedBlocks, blockSize, charToRank, data.Length, maxCharByteSize);
         }
 
         else if (mode == "decode")
         {
             // Читаем закодированные данные из входного .ssr-файла, восстанавливая массив закодированных блоков, массив размеров блоков,
-            var (encodedBlocks, blockSizes, charToRank, originalTextLength) = ReadFromFile(filePath);
+            var (encodedBlocks, blockSize, charToRank, originalTextLength) = DecodeFromFile(filePath);
 
             var rankToChar = charToRank
                 .ToDictionary(kvp => kvp.Value, kvp => kvp.Key);                // Создаем обратный словарь, сопоставляющий ранг символу, для использования при декодировании блоков обратно в текст.
 
             // Декодируем все блоки, используя функцию DecodeAllBlocks, которая принимает массив закодированных блоков, массив размеров блоков и словарь ранг->символ.
-            char[] decodedText = DecodeAllBlocks(encodedBlocks, blockSizes, rankToChar);
-             
+            char[] decodedText = DecodeAllBlocks(encodedBlocks, blockSize, originalTextLength, rankToChar);
+
             string result = new string(decodedText, 0, originalTextLength);     // Преобразуем массив декодированных символов в строку, учитывая оригинальную длину текста, чтобы исключить возможные лишние символы из последнего блока.
             string outputFilePath = Path.ChangeExtension(filePath, ".decoded.txt");
             File.WriteAllText(outputFilePath, result);
@@ -119,43 +118,43 @@ class Program
     /// <param name="data"></param>
     /// <param name="charToRank"></param>
     /// <returns></returns>
-        static List<char[]> BuildBlocks(
-            char[] data,
-            Dictionary<char, int> charToRank)
-        {
-            const double MAX_LOG10 = 5000000;
+    // static List<char[]> BuildBlocks(
+    //     char[] data,
+    //     Dictionary<char, int> charToRank)
+    // {
+    //     const double MAX_LOG10 = 5000000;
 
-            var blocks = new List<char[]>();
-            var current = new List<char>();
+    //     var blocks = new List<char[]>();
+    //     var current = new List<char>();
 
-            BigInteger currentValue = 0;
-            int BaseVal = charToRank.Count;
+    //     BigInteger currentValue = 0;
+    //     int BaseVal = charToRank.Count;
 
-            foreach (var c in data)
-            {
-                int rank = charToRank[c] - 1;
-                BigInteger nextValue = currentValue * BaseVal + rank;
+    //     foreach (var c in data)
+    //     {
+    //         int rank = charToRank[c] - 1;
+    //         BigInteger nextValue = currentValue * BaseVal + rank;
 
-                if (current.Count > 0 &&
-                    nextValue > 0 &&
-                    BigInteger.Log10(nextValue) > MAX_LOG10)
-                {
-                    blocks.Add(current.ToArray());
-                    current.Clear();
-                    currentValue = 0;
-                }
+    //         if (current.Count > 0 &&
+    //             nextValue > 0 &&
+    //             BigInteger.Log10(nextValue) > MAX_LOG10)
+    //         {
+    //             blocks.Add(current.ToArray());
+    //             current.Clear();
+    //             currentValue = 0;
+    //         }
 
-                current.Add(c);
-                currentValue = nextValue;
-            }
+    //         current.Add(c);
+    //         currentValue = nextValue;
+    //     }
 
-            if (current.Count > 0)
-            {
-                blocks.Add(current.ToArray());
-            }
+    //     if (current.Count > 0)
+    //     {
+    //         blocks.Add(current.ToArray());
+    //     }
 
-            return blocks;
-        }
+    //     return blocks;
+    // }
 
     /// <summary>
     /// Функция для печати справки по использованию программы. Вызывается, если аргументы командной строки не соответствуют ожидаемому формату.
@@ -192,6 +191,16 @@ class Program
         return result;
     }
 
+    static BigInteger[] EncodeAllBlocks(char[][] blocks, Dictionary<char, int> charToRank)
+    {
+        var encodedBlocks = new BigInteger[blocks.Length];
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            encodedBlocks[i] = EncodeBlock(blocks[i], charToRank);
+        }
+        return encodedBlocks;
+    }
+
     /// <summary>
     /// Декодирует блок символов из заданного числового значения, используя отображение рангов в символы.
     /// </summary>
@@ -224,14 +233,16 @@ class Program
     /// Длина возвращаемого массива равна сумме значений в <paramref name="blockSizes"/>.
     /// </returns>
     static char[] DecodeAllBlocks(
-        BigInteger[] encodedBlocks, 
-        int[] blockSizes,
+        BigInteger[] encodedBlocks,
+        int blockSize,
+        int originalTextLength,
         Dictionary<int, char> rankToChar)
     {
         var result = new List<char>();
         for (int i = 0; i < encodedBlocks.Length; i++)
         {
-            char[] blockText = DecodeBlock(encodedBlocks[i], rankToChar, blockSizes[i]);
+            var currentBlockSize = (i == encodedBlocks.Length - 1) ? originalTextLength - blockSize * i : blockSize;
+            char[] blockText = DecodeBlock(encodedBlocks[i], rankToChar, currentBlockSize);
             result.AddRange(blockText);
         }
         return result.ToArray();
@@ -270,15 +281,20 @@ class Program
     static void EncodeToFile(
         string outputFilePath,
         BigInteger[] encodedBlocks,
-        int[] blockSizes,
+        int blockSize,
         Dictionary<char, int> charRanks,
-        int originalTextLength)
+        int originalTextLength,
+        byte maxCharByteSize = 1)
     {
         using (var fs = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write))
         using (var bw = new BinaryWriter(fs))
         {
             // Пишем заголовок
-            bw.Write(0x535352);
+            var SSR = new byte[] { 0x53, 0x53, 0x52 }; // "SSR" + null byte
+            bw.Write(SSR);
+
+            bw.Write(maxCharByteSize);
+
             // Пишем длину исходного текста
             bw.Write(originalTextLength);
             // Пишем количество уникальных символов
@@ -287,25 +303,70 @@ class Program
             // Пишем символы
             foreach (var kvp in charRanks)
             {
-                bw.Write((int)kvp.Key);
+                // Записываем символ в виде массива байтов фиксированной длины, добавляя ведущие нули при необходимости
+                var charBytes = System.Text.Encoding.UTF8.GetBytes(new char[] { kvp.Key });
+                if (charBytes.Length < maxCharByteSize)
+                {
+                    var paddedBytes = new byte[maxCharByteSize];
+                    Array.Copy(charBytes, 0, paddedBytes, maxCharByteSize - charBytes.Length, charBytes.Length);
+                    charBytes = paddedBytes;
+                }
+                bw.Write(charBytes);
                 //bw.Write(kvp.Value);
             }
 
-            // Информация о блоках
-            bw.Write(encodedBlocks.Length);
-            foreach (var blockSize in blockSizes)
-            {
-                bw.Write(blockSize);
-            }
+            // Информация о размере блоков
+            bw.Write(blockSize);
+
+            var byteBlockSize = GetMaxBlockSize(encodedBlocks);
+            bw.Write((ushort)byteBlockSize);
+
             foreach (var encoded in encodedBlocks)
             {
                 var bytes = encoded.ToByteArray(isUnsigned: true, isBigEndian: true);
-                bw.Write(bytes.Length);
+                if (bytes.Length < byteBlockSize)
+                {
+                    // Добавляем ведущие нули, если длина байтов меньше максимального размера блока
+                    var paddedBytes = new byte[byteBlockSize];
+                    Array.Copy(bytes, 0, paddedBytes, byteBlockSize - bytes.Length, bytes.Length);
+                    bytes = paddedBytes;
+                }
                 bw.Write(bytes);
             }
             Console.WriteLine($"Данные сохранены в {outputFilePath}");
         }
 
+    }
+
+    static ushort GetMaxBlockSize(BigInteger[] encodedBlocks)
+    {
+        ushort maxSize = 0;
+        foreach (var block in encodedBlocks)
+        {
+            var byteLength = block.ToByteArray(isUnsigned: true, isBigEndian: true).Length;
+            if (byteLength > maxSize)
+                maxSize = (ushort)byteLength;
+        }
+        return maxSize;
+    }
+
+    static byte MaxCharByteSize(Dictionary<char, int> charRanks)
+    {
+        byte maxSize = 0;
+        foreach (var kvp in charRanks)
+        {
+            var ch = kvp.Key;
+
+            if (char.IsSurrogate(ch))
+            {
+                return 4;
+            }
+
+            var byteLength = System.Text.Encoding.UTF8.GetByteCount(new char[] { kvp.Key });
+            if (byteLength > maxSize)
+                maxSize = (byte)byteLength;
+        }
+        return maxSize;
     }
 
     /// <summary>
@@ -340,15 +401,17 @@ class Program
     /// blockCount:
     ///     int32 byteLength
     ///     byte[byteLength] encodedBlock
-    static (BigInteger[], int[], Dictionary<char, int>, int) ReadFromFile(string inputFilePath)
+    static (BigInteger[], int, Dictionary<char, int>, int) DecodeFromFile(string inputFilePath)
     {
         using (var fs = new FileStream(inputFilePath, FileMode.Open, FileAccess.Read))
         using (var br = new BinaryReader(fs))
         {
             // Чтение заголовка файла и проверка его корректности. Ожидается, что первые 4 байта файла будут равны 0x535352, что служит маркером правильного формата данных.
-            int header = br.ReadInt32();
-            if (header != 0x535352)
+            var header = System.Text.Encoding.ASCII.GetString(br.ReadBytes(3));
+            if (header != "SSR") // "SSR"
                 throw new InvalidDataException("Неверный формат файла");
+
+            byte maxCharByteSize = br.ReadByte();
 
             // Чтение метаданных из файла (длина исходного текста, количество уникальных символов,
             int originalTextLength = br.ReadInt32();
@@ -366,31 +429,26 @@ class Program
             Dictionary<char, int> charRanks = new Dictionary<char, int>();
             for (int i = 0; i < charCount; i++)
             {
-                char c = (char)br.ReadInt32();
-                charRanks[c] = i;
+                var charBytes = br.ReadBytes(maxCharByteSize);
+                char c = System.Text.Encoding.UTF8.GetString(charBytes).TrimStart('\0')[0]; // Удаляем ведущие нули и получаем символ
+                charRanks[c] = i + 1;
             }
 
-            // Работа с блоками данных:
-            // Чтение количества блоков.
-            int blockCount = br.ReadInt32();
+            // Чтение размеров блоков.
+            int blockSize = br.ReadInt32();
 
-            // Чтение массива размеров блоков.
-            int[] blockSizes = new int[blockCount];
-            for (int i = 0; i < blockCount; i++)
-            {
-                blockSizes[i] = br.ReadInt32();
-            }
+            var blockCount = (int)Math.Ceiling((double)originalTextLength / blockSize);
 
+            ushort byteBlockSize = br.ReadUInt16();
             // Чтение массива закодированных блоков.
             BigInteger[] encodedBlocks = new BigInteger[blockCount];
             for (int i = 0; i < blockCount; i++)
             {
-                int byteLength = br.ReadInt32();
-                byte[] bytes = br.ReadBytes(byteLength);
-                encodedBlocks[i] = new BigInteger(bytes, isUnsigned: true, isBigEndian:true);
+                byte[] bytes = br.ReadBytes(byteBlockSize);
+                encodedBlocks[i] = new BigInteger(bytes, isUnsigned: true, isBigEndian: true);
             }
             // Возвращаем прочитанные данные в виде кортежа, который будет использоваться для декодирования текста.
-            return (encodedBlocks, blockSizes, charRanks, originalTextLength);
+            return (encodedBlocks, blockSize, charRanks, originalTextLength);
         }
     }
 
