@@ -29,25 +29,32 @@ class Program
 
     static void Main(string[] args)
     {
+        string mode;
+        string filePath;
         // Проверяем, что передано достаточно аргументов командной строки
         if (args.Length < 2)
         {
-            PrintHelp();
-            return;
+            Console.WriteLine("Введите режим (encode/decode):");
+            mode = Console.ReadLine();
+
+            Console.WriteLine("Введите путь к файлу:");
+            filePath = Console.ReadLine();
         }
-        if (args[0] != "encode" && args[0] != "decode")
+        else
+        {
+            mode = args[0];
+            filePath = args[1];
+        }
+        if (mode != "encode" && mode != "decode")
         {
             PrintHelp();
             return;
         }
-
-        string mode = args[0];
-        string filePath = args[1];
 
         if (mode == "encode")
         {
             // Читаем весь текст из входного файла и преобразуем его в массив символов для дальнейшей обработки.
-            char[] data = File.ReadAllText(args[1])
+            char[] data = File.ReadAllText(filePath)
             .ToCharArray();
 
             // Группируем символы по их значению и подсчитываем количество вхождений каждого символа, формируя словарь символ->количество.
